@@ -2,6 +2,7 @@ import discord
 import os
 import shutil
 import datetime
+import asyncio
 from discord.ext import commands
 
 # Obtener el token desde las variables de entorno
@@ -17,8 +18,8 @@ intents.messages = True
 intents.guilds = True
 intents.message_content = True
 
-# Inicializar bot sin prefijo, pero con soporte para comandos de barra (/)
-bot = commands.Bot(command_prefix=commands.when_mentioned_or(""), intents=intents)
+# Inicializar bot sin prefijo, con soporte para comandos de barra (/)
+bot = commands.Bot(command_prefix=commands.when_mentioned_or("!"), intents=intents)
 
 # Carpeta donde se guardarán los archivos
 UPLOAD_FOLDER = "uploads"
@@ -30,8 +31,7 @@ zip_name = DEFAULT_NAME
 
 # Crear carpetas si no existen
 for folder in [UPLOAD_FOLDER, EXTRA_FOLDER]:
-    if not os.path.exists(folder):
-        os.makedirs(folder)
+    os.makedirs(folder, exist_ok=True)
 
 @bot.event
 async def on_ready():
@@ -48,22 +48,42 @@ async def nombre(interaction: discord.Interaction, nuevo_nombre: str):
 @bot.tree.command(name="subir")
 async def subir(interaction: discord.Interaction):
     """Comprime los archivos subidos y envía el ZIP"""
+    archivos = os.listdir(UPLOAD_FOLDER)
+    if not archivos:
+        await interaction.response.send_message("⚠️ No hay archivos en `uploads` para comprimir.", ephemeral=True)
+        return
+
     fecha = datetime.datetime.now().strftime("%d-%m-%Y")
     zip_path = f"{UPLOAD_FOLDER}/{zip_name} {fecha}.zip"
 
-    shutil.make_archive(zip_path.replace(".zip", ""), 'zip', UPLOAD_FOLDER)
-
-    await interaction.response.send_message(f"📁 Archivo ZIP `{zip_name} {fecha}.zip` generado.", file=discord.File(zip_path))
+    try:
+        shutil.make_archive(zip_path.replace(".zip", ""), 'zip', UPLOAD_FOLDER)
+        await interaction.response.send_message(
+            f"📁 Archivo ZIP `{zip_name} {fecha}.zip` generado.",
+            file=discord.File(zip_path)
+        )
+    except Exception as e:
+        await interaction.response.send_message(f"🚨 Error al comprimir archivos: `{str(e)}`", ephemeral=True)
 
 @bot.tree.command(name="subir_extra")
 async def subir_extra(interaction: discord.Interaction):
     """Comprime los archivos en el ZIP extra y lo envía"""
+    archivos = os.listdir(EXTRA_FOLDER)
+    if not archivos:
+        await interaction.response.send_message("⚠️ No hay archivos en `extra_uploads` para comprimir.", ephemeral=True)
+        return
+
     fecha = datetime.datetime.now().strftime("%d-%m-%Y")
     zip_path = f"{EXTRA_FOLDER}/{zip_name}_extra_{fecha}.zip"
 
-    shutil.make_archive(zip_path.replace(".zip", ""), 'zip', EXTRA_FOLDER)
-
-    await interaction.response.send_message(f"📁 Archivo ZIP extra `{zip_name}_extra_{fecha}.zip` generado.", file=discord.File(zip_path))
+    try:
+        shutil.make_archive(zip_path.replace(".zip", ""), 'zip', EXTRA_FOLDER)
+        await interaction.response.send_message(
+            f"📁 Archivo ZIP extra `{zip_name}_extra_{fecha}.zip` generado.",
+            file=discord.File(zip_path)
+        )
+    except Exception as e:
+        await interaction.response.send_message(f"🚨 Error al comprimir archivos: `{str(e)}`", ephemeral=True)
 
 @bot.tree.command(name="resetear")
 async def resetear(interaction: discord.Interaction):
@@ -117,8 +137,12 @@ async def on_message(message):
     
     await bot.process_commands(message)
 
-# Ejecutar el bot
+# Corrección del problema con asyncio.run() en Railway
+async def main():
+    async with bot:
+        await bot.start(TOKEN)
+
 try:
-    bot.run(TOKEN)
+    asyncio.run(main())
 except discord.errors.LoginFailure:
     print("🚨 ERROR: Token inválido. Revisa tu configuración en Railway.")
