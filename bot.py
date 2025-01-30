@@ -17,8 +17,8 @@ intents.messages = True
 intents.guilds = True
 intents.message_content = True
 
-# Inicializar bot usando comandos de barra (/)
-bot = commands.InteractionBot(intents=intents)
+# Inicializar bot sin prefijo, pero con soporte para comandos de barra (/)
+bot = commands.Bot(command_prefix=commands.when_mentioned_or(""), intents=intents)
 
 # Carpeta donde se guardarán los archivos
 UPLOAD_FOLDER = "uploads"
@@ -35,7 +35,7 @@ for folder in [UPLOAD_FOLDER, EXTRA_FOLDER]:
 
 @bot.event
 async def on_ready():
-    await bot.tree.sync()  # Sincroniza los comandos de barra
+    await bot.tree.sync()  # Sincroniza los comandos de barra con Discord
     print(f"✅ {bot.user} está online y listo para recibir archivos.")
 
 @bot.tree.command(name="nombre")
