@@ -1,70 +1,82 @@
 import discord
 import os
 import shutil
-import datetime
-import asyncio
 from discord.ext import commands
+from dotenv import load_dotenv
 
-TOKEN = os.environ.get("DISCORD_TOKEN")
+# Cargar variables de entorno (.env)
+load_dotenv()
+TOKEN = os.getenv("DISCORD_TOKEN")
 
+# Verificar que el token esté disponible
 if not TOKEN:
-    raise ValueError("🚨 ERROR: No se encontró el token del bot. Asegúrate de configurarlo en Railway.")
+    raise ValueError("🚨 ERROR: No se encontró el token del bot. Asegúrate de configurarlo en las variables de entorno.")
 
+# Configurar intents
 intents = discord.Intents.default()
 intents.messages = True
 intents.guilds = True
 intents.message_content = True
 
-bot = commands.Bot(command_prefix=commands.when_mentioned_or("!"), intents=intents)
+# Inicializar bot
+bot = commands.Bot(command_prefix="!", intents=intents)
 
+# Carpeta donde se guardarán los archivos
 UPLOAD_FOLDER = "uploads"
-EXTRA_FOLDER = "extra_uploads"
-DEFAULT_NAME = "Modpack"
-zip_name = DEFAULT_NAME
+DEFAULT_ZIP_NAME = "archivos_comprimidos"
+custom_zip_name = DEFAULT_ZIP_NAME  # Nombre personalizable del ZIP
 
-for folder in [UPLOAD_FOLDER, EXTRA_FOLDER]:
-    os.makedirs(folder, exist_ok=True)
+# Crear carpeta si no existe
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
 @bot.event
 async def on_ready():
-    await bot.tree.sync()
-    print(f"✅ {bot.user} está online.")
+    print(f"✅ {bot.user} está online y listo para recibir archivos.")
 
-@bot.tree.command(name="nombre")
-async def nombre(interaction: discord.Interaction, nuevo_nombre: str):
-    global zip_name
-    zip_name = nuevo_nombre
-    await interaction.response.send_message(f"✅ Nombre del ZIP actualizado a: `{zip_name}`")
+@bot.command()
+async def nombre(ctx, *, nombre: str):
+    """Permite al usuario establecer un nombre personalizado para el ZIP."""
+    global custom_zip_name
+    custom_zip_name = nombre.replace(" ", "_")  # Reemplazar espacios con guiones bajos
+    await ctx.send(f"✅ Nombre del ZIP cambiado a: `{custom_zip_name}.zip`")
 
-@bot.tree.command(name="subir")
-async def subir(interaction: discord.Interaction):
-    await interaction.response.defer()
-    archivos = os.listdir(UPLOAD_FOLDER)
-    
-    if not archivos:
-        await interaction.followup.send("⚠️ No hay archivos en `uploads` para comprimir.", ephemeral=True)
-        return
+@bot.command()
+async def subir(ctx):
+    """Comprime los archivos subidos y envía el ZIP con el nombre personalizado."""
+    zip_path = f"{UPLOAD_FOLDER}/{custom_zip_name}.zip"
+    shutil.make_archive(zip_path.replace(".zip", ""), 'zip', UPLOAD_FOLDER)
+    await ctx.send(f"📁 Archivo ZIP `{custom_zip_name}.zip` generado:", file=discord.File(zip_path))
 
-    fecha = datetime.datetime.now().strftime("%d-%m-%Y")
-    zip_path = f"{UPLOAD_FOLDER}/{zip_name} {fecha}.zip"
+@bot.command()
+async def subir_extra(ctx):
+    """Crea un segundo archivo ZIP para almacenamiento extra."""
+    extra_zip_name = "archivos_extra"
+    zip_path = f"{UPLOAD_FOLDER}/{extra_zip_name}.zip"
+    shutil.make_archive(zip_path.replace(".zip", ""), 'zip', UPLOAD_FOLDER)
+    await ctx.send(f"📁 Archivo ZIP `{extra_zip_name}.zip` generado:", file=discord.File(zip_path))
 
-    try:
-        print("📦 Creando archivo ZIP...")
-        shutil.make_archive(zip_path.replace(".zip", ""), 'zip', UPLOAD_FOLDER)
-        print("✅ ZIP creado:", zip_path)
-        await interaction.followup.send(
-            f"📁 Archivo ZIP `{zip_name} {fecha}.zip` generado.",
-            file=discord.File(zip_path)
-        )
-    except Exception as e:
-        print("🚨 Error al crear el ZIP:", str(e))
-        await interaction.followup.send(f"🚨 Error al comprimir archivos: `{str(e)}`", ephemeral=True)
+@bot.command()
+async def resetear(ctx):
+    """Elimina todos los archivos en la carpeta de subida."""
+    for file in os.listdir(UPLOAD_FOLDER):
+        file_path = os.path.join(UPLOAD_FOLDER, file)
+        os.remove(file_path)
+    await ctx.send("🗑️ Todos los archivos han sido eliminados.")
+
+@bot.command()
+async def limpiar(ctx, *, nombre_archivo: str):
+    """Elimina un archivo específico por su nombre."""
+    file_path = os.path.join(UPLOAD_FOLDER, nombre_archivo)
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        await ctx.send(f"✅ Archivo `{nombre_archivo}` eliminado.")
+    else:
+        await ctx.send(f"⚠️ No se encontró el archivo `{nombre_archivo}`.")
 
 @bot.event
 async def on_message(message):
-    if message.author.bot:
-        return
-
+    """Recibe archivos y los guarda en la carpeta."""
     if message.attachments:
         for attachment in message.attachments:
             if attachment.filename.endswith((".dff", ".txd")):
@@ -74,11 +86,8 @@ async def on_message(message):
     
     await bot.process_commands(message)
 
-async def main():
-    async with bot:
-        await bot.start(TOKEN)
-
+# Ejecutar el bot
 try:
-    asyncio.run(main())
+    bot.run(TOKEN)
 except discord.errors.LoginFailure:
-    print("🚨 ERROR: Token inválido. Revisa tu configuración en Railway.")
+    print("🚨 ERROR: Token inválido. Revisa tu configuración.")
