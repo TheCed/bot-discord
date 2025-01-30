@@ -17,8 +17,8 @@ intents.messages = True
 intents.guilds = True
 intents.message_content = True
 
-# Inicializar bot
-bot = commands.Bot(intents=intents)
+# Inicializar bot usando comandos de barra (/)
+bot = commands.InteractionBot(intents=intents)
 
 # Carpeta donde se guardarán los archivos
 UPLOAD_FOLDER = "uploads"
@@ -35,7 +35,7 @@ for folder in [UPLOAD_FOLDER, EXTRA_FOLDER]:
 
 @bot.event
 async def on_ready():
-    await bot.tree.sync()  # Sincronizar comandos con Discord
+    await bot.tree.sync()  # Sincroniza los comandos de barra
     print(f"✅ {bot.user} está online y listo para recibir archivos.")
 
 @bot.tree.command(name="nombre")
@@ -50,8 +50,9 @@ async def subir(interaction: discord.Interaction):
     """Comprime los archivos subidos y envía el ZIP"""
     fecha = datetime.datetime.now().strftime("%d-%m-%Y")
     zip_path = f"{UPLOAD_FOLDER}/{zip_name} {fecha}.zip"
-    
+
     shutil.make_archive(zip_path.replace(".zip", ""), 'zip', UPLOAD_FOLDER)
+
     await interaction.response.send_message(f"📁 Archivo ZIP `{zip_name} {fecha}.zip` generado.", file=discord.File(zip_path))
 
 @bot.tree.command(name="subir_extra")
@@ -59,8 +60,9 @@ async def subir_extra(interaction: discord.Interaction):
     """Comprime los archivos en el ZIP extra y lo envía"""
     fecha = datetime.datetime.now().strftime("%d-%m-%Y")
     zip_path = f"{EXTRA_FOLDER}/{zip_name}_extra_{fecha}.zip"
-    
+
     shutil.make_archive(zip_path.replace(".zip", ""), 'zip', EXTRA_FOLDER)
+
     await interaction.response.send_message(f"📁 Archivo ZIP extra `{zip_name}_extra_{fecha}.zip` generado.", file=discord.File(zip_path))
 
 @bot.tree.command(name="resetear")
@@ -69,6 +71,7 @@ async def resetear(interaction: discord.Interaction):
     for folder in [UPLOAD_FOLDER, EXTRA_FOLDER]:
         for file in os.listdir(folder):
             os.remove(os.path.join(folder, file))
+
     await interaction.response.send_message("🗑️ Todos los archivos han sido eliminados.")
 
 @bot.tree.command(name="limpiar")
