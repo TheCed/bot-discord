@@ -1,12 +1,16 @@
 import discord
 import os
-import rarfile
+import shutil
 from discord.ext import commands
 from dotenv import load_dotenv
 
 # Cargar variables de entorno (.env)
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
+
+# Verificar que el token esté disponible
+if not TOKEN:
+    raise ValueError("🚨 ERROR: No se encontró el token del bot. Asegúrate de configurarlo en las variables de entorno.")
 
 # Configurar intents
 intents = discord.Intents.default()
@@ -19,7 +23,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Carpeta donde se guardarán los archivos
 UPLOAD_FOLDER = "uploads"
-RAR_FILE = "archivos_comprimidos.rar"
+RAR_FILE = "archivos_comprimidos"
 
 # Crear carpeta si no existe
 if not os.path.exists(UPLOAD_FOLDER):
@@ -27,19 +31,17 @@ if not os.path.exists(UPLOAD_FOLDER):
 
 @bot.event
 async def on_ready():
-    print(f"{bot.user} está online y listo para recibir archivos.")
+    print(f"✅ {bot.user} está online y listo para recibir archivos.")
 
 @bot.command()
 async def subir(ctx):
-    """Comprime los archivos subidos y envía el RAR"""
-    rar_path = os.path.join(UPLOAD_FOLDER, RAR_FILE)
+    """Comprime los archivos subidos y envía el ZIP"""
+    zip_path = f"{UPLOAD_FOLDER}/{RAR_FILE}.zip"
     
-    with rarfile.RarFile(rar_path, "w") as rar:
-        for file in os.listdir(UPLOAD_FOLDER):
-            if file.endswith((".dff", ".txd")):
-                rar.write(os.path.join(UPLOAD_FOLDER, file), file)
+    # Comprimir archivos en ZIP
+    shutil.make_archive(zip_path.replace(".zip", ""), 'zip', UPLOAD_FOLDER)
     
-    await ctx.send("📁 Archivo RAR generado:", file=discord.File(rar_path))
+    await ctx.send("📁 Archivo ZIP generado:", file=discord.File(zip_path))
 
 @bot.event
 async def on_message(message):
@@ -49,9 +51,12 @@ async def on_message(message):
             if attachment.filename.endswith((".dff", ".txd")):
                 file_path = os.path.join(UPLOAD_FOLDER, attachment.filename)
                 await attachment.save(file_path)
-                await message.channel.send(f"✅ Archivo `{attachment.filename}` guardado.")
+                await message.channel.send(f"✅ Archivo `{attachment.filename}` guardado correctamente.")
     
     await bot.process_commands(message)
 
 # Ejecutar el bot
-bot.run(TOKEN)
+try:
+    bot.run(TOKEN)
+except discord.errors.LoginFailure:
+    print("🚨 ERROR: Token inválido. Revisa tu configuración.")
