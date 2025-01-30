@@ -14,6 +14,7 @@ intents = discord.Intents.default()
 intents.messages = True
 intents.guilds = True
 intents.message_content = True
+intents.attachments = True
 
 bot = commands.Bot(command_prefix=commands.when_mentioned_or("!"), intents=intents)
 
@@ -40,6 +41,7 @@ async def nombre(interaction: discord.Interaction, nuevo_nombre: str):
 async def subir(interaction: discord.Interaction):
     await interaction.response.defer()
     archivos = os.listdir(UPLOAD_FOLDER)
+    print(f"📁 Archivos en uploads: {archivos}")
     
     if not archivos:
         await interaction.followup.send("⚠️ No hay archivos en `uploads` para comprimir.", ephemeral=True)
@@ -49,12 +51,16 @@ async def subir(interaction: discord.Interaction):
     zip_path = f"{UPLOAD_FOLDER}/{zip_name} {fecha}.zip"
 
     try:
+        print("📦 Creando archivo ZIP...")
         shutil.make_archive(zip_path.replace(".zip", ""), 'zip', UPLOAD_FOLDER)
+        print("✅ ZIP creado:", zip_path)
+
         await interaction.followup.send(
             f"📁 Archivo ZIP `{zip_name} {fecha}.zip` generado.",
             file=discord.File(zip_path)
         )
     except Exception as e:
+        print("🚨 Error al crear el ZIP:", str(e))
         await interaction.followup.send(f"🚨 Error al comprimir archivos: `{str(e)}`", ephemeral=True)
 
 @bot.tree.command(name="resetear")
@@ -79,8 +85,9 @@ async def on_message(message):
         for attachment in message.attachments:
             if attachment.filename.endswith((".dff", ".txd")):
                 file_path = os.path.join(UPLOAD_FOLDER, attachment.filename)
-                await attachment.save(file_path)
-                await message.channel.send(f"✅ Archivo `{attachment.filename}` guardado correctamente.")
+                if not os.path.exists(file_path):  # Evita duplicados
+                    await attachment.save(file_path)
+                    await message.channel.send(f"✅ Archivo `{attachment.filename}` guardado correctamente.")
     
     await bot.process_commands(message)
 
