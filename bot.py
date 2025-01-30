@@ -38,7 +38,7 @@ async def nombre(interaction: discord.Interaction, nuevo_nombre: str):
 
 @bot.tree.command(name="subir")
 async def subir(interaction: discord.Interaction):
-    await interaction.response.defer()
+    await interaction.response.defer()  # ⚠️ Evita que Discord cancele la respuesta
     archivos = os.listdir(UPLOAD_FOLDER)
     
     if not archivos:
@@ -49,26 +49,16 @@ async def subir(interaction: discord.Interaction):
     zip_path = f"{UPLOAD_FOLDER}/{zip_name} {fecha}.zip"
 
     try:
+        print("📦 Creando archivo ZIP...")
         shutil.make_archive(zip_path.replace(".zip", ""), 'zip', UPLOAD_FOLDER)
+        print("✅ ZIP creado:", zip_path)
         await interaction.followup.send(
             f"📁 Archivo ZIP `{zip_name} {fecha}.zip` generado.",
             file=discord.File(zip_path)
         )
     except Exception as e:
+        print("🚨 Error al crear el ZIP:", str(e))
         await interaction.followup.send(f"🚨 Error al comprimir archivos: `{str(e)}`", ephemeral=True)
-
-@bot.tree.command(name="resetear")
-async def resetear(interaction: discord.Interaction):
-    """Elimina todos los archivos en las carpetas de subida."""
-    for folder in [UPLOAD_FOLDER, EXTRA_FOLDER]:
-        for file in os.listdir(folder):
-            file_path = os.path.join(folder, file)
-            try:
-                os.remove(file_path)
-            except Exception as e:
-                await interaction.response.send_message(f"⚠️ No se pudo eliminar `{file}`: {str(e)}", ephemeral=True)
-                return
-    await interaction.response.send_message("🗑️ Todos los archivos han sido eliminados.")
 
 @bot.event
 async def on_message(message):
