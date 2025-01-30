@@ -34,18 +34,14 @@ async def on_ready():
 async def nombre(interaction: discord.Interaction, nuevo_nombre: str):
     global zip_name
     zip_name = nuevo_nombre
-    print(f"🔄 Nombre del ZIP cambiado a: {zip_name}")
     await interaction.response.send_message(f"✅ Nombre del ZIP actualizado a: `{zip_name}`")
 
 @bot.tree.command(name="subir")
 async def subir(interaction: discord.Interaction):
     await interaction.response.defer()
-    
-    print("📂 Verificando archivos en 'uploads'...")
     archivos = os.listdir(UPLOAD_FOLDER)
     
     if not archivos:
-        print("⚠️ No hay archivos en la carpeta.")
         await interaction.followup.send("⚠️ No hay archivos en `uploads` para comprimir.", ephemeral=True)
         return
 
@@ -53,30 +49,37 @@ async def subir(interaction: discord.Interaction):
     zip_path = f"{UPLOAD_FOLDER}/{zip_name} {fecha}.zip"
 
     try:
-        print("📦 Creando archivo ZIP...")
         shutil.make_archive(zip_path.replace(".zip", ""), 'zip', UPLOAD_FOLDER)
-        print("✅ ZIP creado:", zip_path)
         await interaction.followup.send(
             f"📁 Archivo ZIP `{zip_name} {fecha}.zip` generado.",
             file=discord.File(zip_path)
         )
     except Exception as e:
-        print("🚨 Error al crear el ZIP:", str(e))
         await interaction.followup.send(f"🚨 Error al comprimir archivos: `{str(e)}`", ephemeral=True)
+
+@bot.tree.command(name="resetear")
+async def resetear(interaction: discord.Interaction):
+    """Elimina todos los archivos en las carpetas de subida."""
+    for folder in [UPLOAD_FOLDER, EXTRA_FOLDER]:
+        for file in os.listdir(folder):
+            file_path = os.path.join(folder, file)
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                await interaction.response.send_message(f"⚠️ No se pudo eliminar `{file}`: {str(e)}", ephemeral=True)
+                return
+    await interaction.response.send_message("🗑️ Todos los archivos han sido eliminados.")
 
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    print(f"📩 Mensaje recibido: {message.content}")
-
     if message.attachments:
         for attachment in message.attachments:
             if attachment.filename.endswith((".dff", ".txd")):
                 file_path = os.path.join(UPLOAD_FOLDER, attachment.filename)
                 await attachment.save(file_path)
-                print(f"✅ Archivo guardado: {attachment.filename}")
                 await message.channel.send(f"✅ Archivo `{attachment.filename}` guardado correctamente.")
     
     await bot.process_commands(message)
