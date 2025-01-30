@@ -2,7 +2,6 @@ import discord
 import os
 import shutil
 import datetime
-import asyncio
 from discord.ext import commands
 
 # Obtener el token desde las variables de entorno
@@ -19,7 +18,7 @@ intents.guilds = True
 intents.message_content = True
 
 # Inicializar bot
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(intents=intents)
 
 # Carpeta donde se guardarán los archivos
 UPLOAD_FOLDER = "uploads"
@@ -29,73 +28,51 @@ DEFAULT_NAME = "Modpack"
 # Variables globales para el nombre del ZIP
 zip_name = DEFAULT_NAME
 
-# Tamaño máximo permitido para el ZIP (MB)
-MAX_ZIP_SIZE_MB = 50  
-
 # Crear carpetas si no existen
 for folder in [UPLOAD_FOLDER, EXTRA_FOLDER]:
-    os.makedirs(folder, exist_ok=True)
+    if not os.path.exists(folder):
+        os.makedirs(folder)
 
 @bot.event
 async def on_ready():
+    await bot.tree.sync()  # Sincronizar comandos con Discord
     print(f"✅ {bot.user} está online y listo para recibir archivos.")
 
-@bot.command()
-async def nombre(ctx, *, nuevo_nombre: str):
+@bot.tree.command(name="nombre")
+async def nombre(interaction: discord.Interaction, nuevo_nombre: str):
     """Asigna un nombre personalizado al archivo ZIP"""
     global zip_name
     zip_name = nuevo_nombre
-    await ctx.send(f"✅ Nombre del ZIP actualizado a: `{zip_name}`")
+    await interaction.response.send_message(f"✅ Nombre del ZIP actualizado a: `{zip_name}`")
 
-async def crear_zip(folder, zip_name):
-    """Crea un archivo ZIP de forma asíncrona"""
-    fecha = datetime.datetime.now().strftime("%d-%m-%Y")
-    zip_path = os.path.join(folder, f"{zip_name} {fecha}.zip")
-    
-    # Verificar tamaño de los archivos antes de comprimir
-    total_size = sum(os.path.getsize(os.path.join(folder, f)) for f in os.listdir(folder)) / (1024 * 1024)
-    
-    if total_size > MAX_ZIP_SIZE_MB:
-        return None, f"⚠️ No se puede generar el ZIP: El tamaño total de los archivos es {total_size:.2f} MB y supera el límite de {MAX_ZIP_SIZE_MB} MB."
-
-    # Comprimir en un hilo separado
-    await asyncio.to_thread(shutil.make_archive, zip_path.replace(".zip", ""), 'zip', folder)
-    
-    return zip_path, None
-
-@bot.command()
-async def subir(ctx):
+@bot.tree.command(name="subir")
+async def subir(interaction: discord.Interaction):
     """Comprime los archivos subidos y envía el ZIP"""
-    zip_path, error = await crear_zip(UPLOAD_FOLDER, zip_name)
+    fecha = datetime.datetime.now().strftime("%d-%m-%Y")
+    zip_path = f"{UPLOAD_FOLDER}/{zip_name} {fecha}.zip"
     
-    if error:
-        await ctx.send(error)
-        return
+    shutil.make_archive(zip_path.replace(".zip", ""), 'zip', UPLOAD_FOLDER)
+    await interaction.response.send_message(f"📁 Archivo ZIP `{zip_name} {fecha}.zip` generado.", file=discord.File(zip_path))
 
-    await ctx.send(f"📁 Archivo ZIP `{os.path.basename(zip_path)}` generado.", file=discord.File(zip_path))
-
-@bot.command()
-async def subir_extra(ctx):
+@bot.tree.command(name="subir_extra")
+async def subir_extra(interaction: discord.Interaction):
     """Comprime los archivos en el ZIP extra y lo envía"""
-    zip_path, error = await crear_zip(EXTRA_FOLDER, f"{zip_name}_extra")
+    fecha = datetime.datetime.now().strftime("%d-%m-%Y")
+    zip_path = f"{EXTRA_FOLDER}/{zip_name}_extra_{fecha}.zip"
+    
+    shutil.make_archive(zip_path.replace(".zip", ""), 'zip', EXTRA_FOLDER)
+    await interaction.response.send_message(f"📁 Archivo ZIP extra `{zip_name}_extra_{fecha}.zip` generado.", file=discord.File(zip_path))
 
-    if error:
-        await ctx.send(error)
-        return
-
-    await ctx.send(f"📁 Archivo ZIP `{os.path.basename(zip_path)}` generado.", file=discord.File(zip_path))
-
-@bot.command()
-async def resetear(ctx):
+@bot.tree.command(name="resetear")
+async def resetear(interaction: discord.Interaction):
     """Elimina todos los archivos subidos"""
     for folder in [UPLOAD_FOLDER, EXTRA_FOLDER]:
         for file in os.listdir(folder):
             os.remove(os.path.join(folder, file))
+    await interaction.response.send_message("🗑️ Todos los archivos han sido eliminados.")
 
-    await ctx.send("🗑️ Todos los archivos han sido eliminados.")
-
-@bot.command()
-async def limpiar(ctx, filename: str):
+@bot.tree.command(name="limpiar")
+async def limpiar(interaction: discord.Interaction, filename: str):
     """Elimina un archivo específico"""
     found = False
     for folder in [UPLOAD_FOLDER, EXTRA_FOLDER]:
@@ -103,27 +80,27 @@ async def limpiar(ctx, filename: str):
         if os.path.exists(file_path):
             os.remove(file_path)
             found = True
-            await ctx.send(f"🗑️ Archivo `{filename}` eliminado correctamente.")
+            await interaction.response.send_message(f"🗑️ Archivo `{filename}` eliminado correctamente.")
+            return
     
     if not found:
-        await ctx.send(f"⚠️ No se encontró `{filename}` en los archivos.")
+        await interaction.response.send_message(f"⚠️ No se encontró `{filename}` en los archivos.")
 
-@bot.command()
-async def remplazar(ctx, filename: str):
+@bot.tree.command(name="remplazar")
+async def remplazar(interaction: discord.Interaction, filename: str):
     """Reemplaza un archivo existente con el nuevo adjunto"""
-    if not ctx.message.attachments:
-        await ctx.send("⚠️ Debes adjuntar un archivo para reemplazarlo.")
+    if not interaction.attachments:
+        await interaction.response.send_message("⚠️ Debes adjuntar un archivo para reemplazarlo.")
         return
     
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
-    
-    for attachment in ctx.message.attachments:
+    for attachment in interaction.attachments:
         if attachment.filename == filename:
+            file_path = os.path.join(UPLOAD_FOLDER, filename)
             await attachment.save(file_path)
-            await ctx.send(f"♻️ Archivo `{filename}` reemplazado correctamente.")
+            await interaction.response.send_message(f"♻️ Archivo `{filename}` reemplazado correctamente.")
             return
 
-    await ctx.send(f"⚠️ No se encontró `{filename}` adjunto en tu mensaje.")
+    await interaction.response.send_message(f"⚠️ No se encontró `{filename}` adjunto en tu mensaje.")
 
 @bot.event
 async def on_message(message):
