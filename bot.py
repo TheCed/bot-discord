@@ -2,6 +2,7 @@ import discord
 import os
 import shutil
 import datetime
+import asyncio
 from discord.ext import commands
 
 # Obtener el token desde las variables de entorno
@@ -28,10 +29,12 @@ DEFAULT_NAME = "Modpack"
 # Variables globales para el nombre del ZIP
 zip_name = DEFAULT_NAME
 
+# Tamaño máximo permitido para el ZIP (MB)
+MAX_ZIP_SIZE_MB = 50  
+
 # Crear carpetas si no existen
 for folder in [UPLOAD_FOLDER, EXTRA_FOLDER]:
-    if not os.path.exists(folder):
-        os.makedirs(folder)
+    os.makedirs(folder, exist_ok=True)
 
 @bot.event
 async def on_ready():
@@ -44,26 +47,43 @@ async def nombre(ctx, *, nuevo_nombre: str):
     zip_name = nuevo_nombre
     await ctx.send(f"✅ Nombre del ZIP actualizado a: `{zip_name}`")
 
+async def crear_zip(folder, zip_name):
+    """Crea un archivo ZIP de forma asíncrona"""
+    fecha = datetime.datetime.now().strftime("%d-%m-%Y")
+    zip_path = os.path.join(folder, f"{zip_name} {fecha}.zip")
+    
+    # Verificar tamaño de los archivos antes de comprimir
+    total_size = sum(os.path.getsize(os.path.join(folder, f)) for f in os.listdir(folder)) / (1024 * 1024)
+    
+    if total_size > MAX_ZIP_SIZE_MB:
+        return None, f"⚠️ No se puede generar el ZIP: El tamaño total de los archivos es {total_size:.2f} MB y supera el límite de {MAX_ZIP_SIZE_MB} MB."
+
+    # Comprimir en un hilo separado
+    await asyncio.to_thread(shutil.make_archive, zip_path.replace(".zip", ""), 'zip', folder)
+    
+    return zip_path, None
+
 @bot.command()
 async def subir(ctx):
     """Comprime los archivos subidos y envía el ZIP"""
-    fecha = datetime.datetime.now().strftime("%d-%m-%Y")
-    zip_path = f"{UPLOAD_FOLDER}/{zip_name} {fecha}.zip"
+    zip_path, error = await crear_zip(UPLOAD_FOLDER, zip_name)
+    
+    if error:
+        await ctx.send(error)
+        return
 
-    # Comprimir archivos en ZIP
-    shutil.make_archive(zip_path.replace(".zip", ""), 'zip', UPLOAD_FOLDER)
-
-    await ctx.send(f"📁 Archivo ZIP `{zip_name} {fecha}.zip` generado.", file=discord.File(zip_path))
+    await ctx.send(f"📁 Archivo ZIP `{os.path.basename(zip_path)}` generado.", file=discord.File(zip_path))
 
 @bot.command()
 async def subir_extra(ctx):
     """Comprime los archivos en el ZIP extra y lo envía"""
-    fecha = datetime.datetime.now().strftime("%d-%m-%Y")
-    zip_path = f"{EXTRA_FOLDER}/{zip_name}_extra_{fecha}.zip"
+    zip_path, error = await crear_zip(EXTRA_FOLDER, f"{zip_name}_extra")
 
-    shutil.make_archive(zip_path.replace(".zip", ""), 'zip', EXTRA_FOLDER)
+    if error:
+        await ctx.send(error)
+        return
 
-    await ctx.send(f"📁 Archivo ZIP extra `{zip_name}_extra_{fecha}.zip` generado.", file=discord.File(zip_path))
+    await ctx.send(f"📁 Archivo ZIP `{os.path.basename(zip_path)}` generado.", file=discord.File(zip_path))
 
 @bot.command()
 async def resetear(ctx):
@@ -95,9 +115,10 @@ async def remplazar(ctx, filename: str):
         await ctx.send("⚠️ Debes adjuntar un archivo para reemplazarlo.")
         return
     
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    
     for attachment in ctx.message.attachments:
         if attachment.filename == filename:
-            file_path = os.path.join(UPLOAD_FOLDER, filename)
             await attachment.save(file_path)
             await ctx.send(f"♻️ Archivo `{filename}` reemplazado correctamente.")
             return
